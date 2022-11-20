@@ -45,6 +45,7 @@ public ref class MyApplication sealed : public Application
 		if (_zone != nullptr)
 	    {
 	        AppDomain::Unload(_zone);
+			_zone = nullptr;
 	    }
 
 	    if (_dataModel->Methods != nullptr)
@@ -68,7 +69,7 @@ public ref class MyApplication sealed : public Application
 
 	Void OnSelectionMethodsListBoxChanged(Object^ sender, SelectionChangedEventArgs^ e)
 	{
-		
+		_resultTextBox->Clear();
 	}
 	
 	Void OnSelectionVariablesListBoxChanged(Object^ sender, SelectionChangedEventArgs^ e)
@@ -118,28 +119,30 @@ public ref class MyApplication sealed : public Application
         FieldInfo^ fieldInfo = _dataModel->Type->GetField(variableName);
 		Object^ valueToSet = _setValueTextBox->Text;
 
-        if (fieldInfo != nullptr)
+        if (fieldInfo == nullptr)
         {
-            try
-            {
-                valueToSet = Convert::ChangeType(valueToSet, fieldInfo->FieldType);
-            }
-            catch (Exception^ exception)
-            {
-				MessageBox::Show(exception->Message);
-				return;
-            }
-
-            if (!fieldInfo->FieldType->IsAssignableFrom(valueToSet->GetType()))
-            {
-            	MessageBox::Show("Cannot assign this value type to the field!");
-				return;
-			}
-
-            fieldInfo->SetValue(_dataModel->Instance, valueToSet);
-            
-			UpdateVariableInTextBox();
+            return;
         }
+
+		try
+        {
+            valueToSet = Convert::ChangeType(valueToSet, fieldInfo->FieldType);
+        }
+        catch (Exception^ exception)
+        {
+			MessageBox::Show(exception->Message);
+			return;
+        }
+
+        if (!fieldInfo->FieldType->IsAssignableFrom(valueToSet->GetType()))
+        {
+            MessageBox::Show("Cannot assign this value type to the field!");
+			return;
+		}
+
+        fieldInfo->SetValue(_dataModel->Instance, valueToSet);
+        
+		UpdateVariableInTextBox();
 	}
 	
 	Void OnAddButtonClick(Object^ sender, RoutedEventArgs^ e)
@@ -180,14 +183,14 @@ public ref class MyApplication sealed : public Application
         auto setup = gcnew AppDomainSetup();
         setup->ApplicationBase = Path::GetDirectoryName(Assembly::GetExecutingAssembly()->Location);
 
-        auto appDomain = AppDomain::CreateDomain("Zone", nullptr, setup, SecurityManager::GetStandardSandbox(evidence));
-		
+        _zone = AppDomain::CreateDomain("Zone", nullptr, setup, SecurityManager::GetStandardSandbox(evidence));
         _assembly = compilationResult->CompiledAssembly;
-        Type^ t = _assembly->GetType("A");	// Class "A" - the same from the Class1.vb
 		
         try
         {
-            _dataModel->Handle = Activator::CreateInstanceFrom(appDomain, t->Assembly->ManifestModule->ScopeName, t->FullName);
+			Type^ type = _assembly->GetType("A");	// Class "A" - the same from the Class1.vb
+
+            _dataModel->Handle = Activator::CreateInstanceFrom(_zone, type->Assembly->ManifestModule->ScopeName, type->FullName);
             _dataModel->Instance = _dataModel->Handle->Unwrap();
             _dataModel->Type = _dataModel->Instance->GetType();
         }
