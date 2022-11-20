@@ -78,7 +78,33 @@ public ref class MyApplication sealed : public Application
 
 	Void OnInvokeButtonClick(Object^ sender, RoutedEventArgs^ e)
 	{
+		if (_methodsListBox->SelectedIndex == -1)
+	    {
+			return;
+		}
+		
+        String^ methodName = _dataModel->Methods[_methodsListBox->SelectedIndex]->Name;
+        MethodInfo^ methodInfo = _dataModel->Type->GetMethod(methodName);
+		Object^ methodResult;
 
+        if (methodInfo == nullptr)
+        {
+			return;
+        }
+
+        if (methodInfo->GetParameters()->Empty<ParameterInfo^>())
+        {
+            methodResult = methodInfo->Invoke(_dataModel->Instance, nullptr);
+        }
+        else
+        {
+            methodResult = methodInfo->Invoke(_dataModel->Instance, gcnew array<Object^>(1)
+            {
+	            _parameterTextBox->Text
+            });
+        }
+
+		_resultTextBox->Text = methodResult != nullptr ? methodResult->ToString() : "";
 	}
 
 	Void OnSetButtonClick(Object^ sender, RoutedEventArgs^ e)
