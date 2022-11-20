@@ -26,9 +26,7 @@ public ref class MyApplication sealed : public Application
 	Object ^_instance;
 	ObjectHandle ^_handle;
 	array<FieldInfo^> ^_fields;
-	MethodInfo ^_methodInfo;
-	FieldInfo ^_fieldInfo;
-	TextBox ^_resultTextBox, ^_parameterTextBox, ^_setTextBox, ^_setTextBox2;
+	TextBox ^_resultTextBox, ^_parameterTextBox, ^_getValueTextBox, ^_setValueTextBox;
 	ComboBox ^_checkZoneComboBox;
 
 	AppDomain^ _zone = nullptr;
@@ -62,14 +60,20 @@ public ref class MyApplication sealed : public Application
 	    }
 	}
 
+	Void UpdateVariableInTextBox()
+	{
+		Object^ instance = _dataModel->Fields[_variablesListBox->SelectedIndex]->GetValue(_dataModel->Instance);
+		_getValueTextBox->Text = instance != nullptr ? instance->ToString() : "";
+	}
+
 	Void OnSelectionMethodsListBoxChanged(Object^ sender, SelectionChangedEventArgs^ e)
 	{
-
+		
 	}
 	
 	Void OnSelectionVariablesListBoxChanged(Object^ sender, SelectionChangedEventArgs^ e)
 	{
-
+		UpdateVariableInTextBox();
 	}
 
 	Void OnInvokeButtonClick(Object^ sender, RoutedEventArgs^ e)
@@ -79,7 +83,37 @@ public ref class MyApplication sealed : public Application
 
 	Void OnSetButtonClick(Object^ sender, RoutedEventArgs^ e)
 	{
+		if (_variablesListBox->SelectedIndex == -1)
+	    {
+			return;
+		}
+		
+        String^ variableName = _dataModel->Fields[_variablesListBox->SelectedIndex]->Name;
+        FieldInfo^ fieldInfo = _dataModel->Type->GetField(variableName);
+		Object^ valueToSet = _setValueTextBox->Text;
 
+        if (fieldInfo != nullptr)
+        {
+            try
+            {
+                valueToSet = Convert::ChangeType(valueToSet, fieldInfo->FieldType);
+            }
+            catch (Exception^ exception)
+            {
+				MessageBox::Show(exception->Message);
+				return;
+            }
+
+            if (!fieldInfo->FieldType->IsAssignableFrom(valueToSet->GetType()))
+            {
+            	MessageBox::Show("Cannot assign this value type to the field!");
+				return;
+			}
+
+            fieldInfo->SetValue(_dataModel->Instance, valueToSet);
+            
+			UpdateVariableInTextBox();
+        }
 	}
 	
 	Void OnAddButtonClick(Object^ sender, RoutedEventArgs^ e)
@@ -160,8 +194,8 @@ public:
 		_errorsListBox =	 safe_cast<ListBox^>(win->FindName("errorsListBox"));
 		_resultTextBox =	 safe_cast<TextBox^>(win->FindName("resultTextBox"));
 		_parameterTextBox =  safe_cast<TextBox^>(win->FindName("parameterTextBox"));
-		_setTextBox =		 safe_cast<TextBox^>(win->FindName("setTextBox"));
-		_setTextBox2 =		 safe_cast<TextBox^>(win->FindName("setTextBox2"));
+		_getValueTextBox =		 safe_cast<TextBox^>(win->FindName("setTextBox"));
+		_setValueTextBox =		 safe_cast<TextBox^>(win->FindName("setTextBox2"));
 		_checkZoneComboBox = safe_cast<ComboBox^>(win->FindName("checkZoneComboBox"));
 
 		_addButton->Click		+= gcnew RoutedEventHandler(this, &MyApplication::OnAddButtonClick);
