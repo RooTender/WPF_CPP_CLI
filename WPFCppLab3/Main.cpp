@@ -12,7 +12,6 @@ using namespace CodeDom;
 using namespace Compiler;
 using namespace Reflection;
 using namespace Documents;
-using namespace std;
 
 
 public ref class MyApplication sealed : public Application
@@ -31,6 +30,37 @@ public ref class MyApplication sealed : public Application
 	FieldInfo ^_fieldInfo;
 	TextBox ^_resultTextBox, ^_parameterTextBox, ^_setTextBox, ^_setTextBox2;
 	ComboBox ^_checkZoneComboBox;
+
+	AppDomain^ _zone = nullptr;
+
+	static String^ GetOutputPath()
+	{
+		return Path::GetDirectoryName(Assembly::GetExecutingAssembly()->Location) + "\\..\\WPFCppLab3";
+	}
+
+	Void Cleanup()
+	{
+		_errorsListBox->Items->Clear();
+		_methodsListBox->ItemsSource = nullptr;
+	    _variablesListBox->ItemsSource = nullptr;
+
+		if (_zone != nullptr)
+	    {
+	        AppDomain::Unload(_zone);
+	    }
+
+	    if (_dataModel->Methods != nullptr)
+	    {
+	        _variablesListBox->ItemsSource = nullptr;
+	        _methodsListBox->ItemsSource = nullptr;
+	        _dataModel->Methods = nullptr;
+	        _dataModel->Fields = nullptr;
+	        _dataModel->Type = nullptr;
+	        _dataModel->Instance = nullptr;
+	        _dataModel->Handle = nullptr;
+	        _assembly = nullptr;
+	    }
+	}
 
 	Void OnSelectionMethodsListBoxChanged(Object^ sender, SelectionChangedEventArgs^ e)
 	{
@@ -54,8 +84,64 @@ public ref class MyApplication sealed : public Application
 	
 	Void OnAddButtonClick(Object^ sender, RoutedEventArgs^ e)
 	{
+		Cleanup();
+		
+	    CodeDomProvider^ provider = CodeDomProvider::CreateProvider("VisualBasic");
 
-	}
+		_code = TextRange(_richTextBox->Document->ContentStart, _richTextBox->Document->ContentEnd).Text;
+
+		auto compileUnit = gcnew CodeSnippetCompileUnit(_code);
+		auto parameters = gcnew CompilerParameters();
+		parameters->GenerateInMemory = true;
+		String^ outputFilename = "Result";
+
+		// The file must exist in two locations in order to work properly
+		// Workaround solution
+	    parameters->OutputAssembly = Path::GetDirectoryName(Assembly::GetExecutingAssembly()->Location) + "\\" + outputFilename + ".dll";
+	    provider->CompileAssemblyFromDom(parameters, compileUnit);
+
+		// Real assembly solution
+	    parameters->OutputAssembly =  GetOutputPath() + "\\" + outputFilename + ".dll";
+	    CompilerResults^ compilationResult = provider->CompileAssemblyFromDom(parameters, compileUnit);
+
+	    if (compilationResult->Errors->Count > 0)
+	    {
+	        for each (CompilerError ^ err in compilationResult->Errors)
+	        {
+	            _errorsListBox->Items->Add(err->ErrorText);
+	        }
+
+			return;
+	    }
+	    
+        auto evidence = gcnew Evidence();
+        evidence->AddHostEvidence(gcnew Zone(_dataModel->SelectedSecurityZone));
+
+        auto setup = gcnew AppDomainSetup();
+        setup->ApplicationBase = Path::GetDirectoryName(Assembly::GetExecutingAssembly()->Location);
+
+        auto appDomain = AppDomain::CreateDomain("Zone", nullptr, setup, SecurityManager::GetStandardSandbox(evidence));
+		
+        _assembly = compilationResult->CompiledAssembly;
+        Type^ t = _assembly->GetType("A");	// Class "A" - the same from the Class1.vb
+		
+        try
+        {
+            _dataModel->Handle = Activator::CreateInstanceFrom(appDomain, t->Assembly->ManifestModule->ScopeName, t->FullName);
+            _dataModel->Instance = _dataModel->Handle->Unwrap();
+            _dataModel->Type = _dataModel->Instance->GetType();
+        }
+        catch (Exception^ exception)
+        {
+            _errorsListBox->Items->Add(exception->Message);
+        }
+
+		_dataModel->Fields = _dataModel->Type->GetFields();
+		_dataModel->Methods = _dataModel->Type->GetMethods();
+
+        _variablesListBox->ItemsSource = _dataModel->Fields;
+        _methodsListBox->ItemsSource = _dataModel->Methods;
+    }
 
 public:
 	MyApplication(Window ^win)
